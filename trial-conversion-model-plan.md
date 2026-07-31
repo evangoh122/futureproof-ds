@@ -1,8 +1,7 @@
 # Model Plan: Early Trial Conversion Prediction
 
-|                  |                                                                                                                                                                    |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **Driver**       | Data Science                                                                                                                                                       |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **Requested by** | Growth team                                                                                                                                                        |
 | **Informed**     | Lifecycle, Growth Analytics, Finance                                                                                                                               |
 | **Objective**    | Predict, from a trial's first 3 days of behavior, whether it will convert to a paid plan, early enough for the growth team to intervene on the ones that will not. |
