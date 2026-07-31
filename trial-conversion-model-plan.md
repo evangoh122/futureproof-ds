@@ -1,9 +1,14 @@
 # Model Plan: Early Trial Conversion Prediction
 
-Author: Data Science
-Requested by: Growth team
-Date: September 8, 2026
-Status: approved, prototype in progress
+|              |                                                                 |
+|--------------|-----------------------------------------------------------------|
+| **Driver**       | Data Science                                                |
+| **Requested by** | Growth team                                                 |
+| **Informed**     | Lifecycle, Growth Analytics, Finance                        |
+| **Objective**    | Predict, from a trial's first 3 days of behavior, whether it will convert to a paid plan, early enough for the growth team to intervene on the ones that will not. |
+| **Date**         | September 8, 2026                                           |
+| **Key outcomes** | A validated day-3 conversion signal, and if it proves out, a deployed and monitored scoring service that the lifecycle, analytics, and finance teams can rely on. |
+| **Status**       | `IN PROGRESS` (prototype)                                   |
 
 ## Background and request
 
