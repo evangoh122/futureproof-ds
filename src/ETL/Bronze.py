@@ -14,7 +14,8 @@ def load_env_variables():
     db_user = os.getenv("Username")
     db_password = os.getenv("Password")
 
-    # Create bronze layer
+    # Create bronze layer - This is where the raw data is extracted from the database and stored in a CSV file
+    # In a SQL environment, this would be a SQL query to extract the data from the database and store it in a SQL or Delta Table
     engine = create_engine(f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}")
 
     df = pd.read_sql("SELECT * FROM ml.trial_conversion", engine)

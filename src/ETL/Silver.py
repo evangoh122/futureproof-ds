@@ -5,15 +5,18 @@ import os
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
 
-# Create silver layer
+# Create silver layer - This is where the data is cleaned and transformed for modeling
 def clean_data():
-    df_1 = pd.read_csv("data/01_raw/trials_raw.csv")
+    df = pd.read_csv("data/01_raw/trials_raw.csv")
 
     # Remove duplicates
-    df_1 = df_1.drop_duplicates()
+    df = df.drop_duplicates()
 
     # Remove rows with missing values
-    df_1 = df_1.dropna()
+    df = df.dropna()
 
-    # Fix data types
-    
+    # Fix date time Columns
+    date_columns = ["snapshot_date", "trial_started_at"]
+    df[date_columns] = df[date_columns].apply(pd.to_datetime, errors='coerce')
+
+    return df
