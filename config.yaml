@@ -1,12 +1,8 @@
 database:
-  # Non-secret connection shape. The username and password are NOT here on
-  # purpose: this file is tracked in git. Those two come from .env.
   host: "dpg-d35pib0dl3ps7394mc4g-a.oregon-postgres.render.com"
   port: 5432
   name: "beam_neb0"
   schema: "ml"
-  # README.md and the notebook both name this table; Bronze.py used to point at
-  # ml.trial_conversion, which does not match either.
   table: "trial_snapshot_latest"
 
 data:
