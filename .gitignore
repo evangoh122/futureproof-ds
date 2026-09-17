@@ -1,5 +1,9 @@
 trials_raw.csv
 trials_clean.csv
+features.csv
 model.pkl
 .ipynb_checkpoints/
 .env
+test_predictions.csv
+__pycache__/
+*.pyc

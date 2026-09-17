@@ -1,0 +1,55 @@
+database:
+  # Non-secret connection shape. The username and password are NOT here on
+  # purpose: this file is tracked in git. Those two come from .env.
+  host: "dpg-d35pib0dl3ps7394mc4g-a.oregon-postgres.render.com"
+  port: 5432
+  name: "beam_neb0"
+  schema: "ml"
+  # README.md and the notebook both name this table; Bronze.py used to point at
+  # ml.trial_conversion, which does not match either.
+  table: "trial_snapshot_latest"
+
+data:
+  raw_path: "data/01_raw/trials_raw.csv"
+  clean_path: "data/02_processed/trials_clean.csv"
+  features_path: "data/03_feature_engineering/features.csv"
+  target_col: "converted"
+  test_size: 0.25
+  random_state: 42
+  features:
+    - "sessions_3d"
+    - "active_days_3d"
+    - "day1_share"
+    - "listen_share"
+    - "avg_session_minutes"
+    - "total_minutes_3d"
+  categorical_features:
+    - "country"
+    - "device_type"
+
+model:
+  type: "xgb"
+
+logistic_regression:
+  max_iter: 1000
+
+xgboost:
+  n_estimators: 400
+  max_depth: 3
+  learning_rate: 0.05
+  min_child_weight: 8
+  subsample: 0.9
+  colsample_bytree: 0.9
+  eval_metric: "auc"
+
+evaluation:
+  # Label cutoff for the confusion matrix and classification report.
+  decision_threshold: 0.5
+  # Trials scored below this go on the growth team's intervention list. Where it
+  # sits depends on how many trials lifecycle can work through per week, so it
+  # is their call rather than a modeling decision.
+  flag_threshold: 0.35
+
+output:
+  model_path: "model.pkl"
+  predictions_path: "data/04_model_pred/test_predictions.csv"

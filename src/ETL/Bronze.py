@@ -1,23 +1,81 @@
-# Import necessary libraries
+import logging
+from pathlib import Path
+
 import pandas as pd
-import numpy as np
-import os
-from dotenv import load_dotenv
+import yaml
+from dotenv import dotenv_values
 from sqlalchemy import create_engine
 
-# Load environment variables from .env file
-def load_env_variables():
-    load_dotenv()
-    db_host = os.getenv("Host")
-    db_port = os.getenv("Port")
-    db_name = os.getenv("Database")
-    db_user = os.getenv("Username")
-    db_password = os.getenv("Password")
+logger = logging.getLogger(__name__)
 
-    # Create bronze layer - This is where the raw data is extracted from the database and stored in a CSV file
-    # In a SQL environment, this would be a SQL query to extract the data from the database and store it in a SQL or Delta Table
-    engine = create_engine(f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}")
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_CONFIG_PATH = PROJECT_ROOT / "config.yaml"
+ENV_PATH = PROJECT_ROOT / ".env"
 
-    df = pd.read_sql("SELECT * FROM ml.trial_conversion", engine)
+USER_KEY = "Username"
+PASSWORD_KEY = "Password"
 
-    df.to_csv("data/01_raw/trials_raw.csv", index=False)
+
+def load_config(config_path=None):
+    """Read the pipeline settings that name the source table and output path."""
+    path = Path(config_path) if config_path else DEFAULT_CONFIG_PATH
+    with open(path, "r", encoding="utf-8") as handle:
+        return yaml.safe_load(handle)
+
+
+def read_credentials(env_path=None):
+    """Read the database username and password from a .env file."""
+    path = Path(env_path) if env_path else ENV_PATH
+    if not path.exists():
+        raise RuntimeError(
+            f"No .env file at {path}. Copy .env.example to .env and fill in "
+            f"{USER_KEY} and {PASSWORD_KEY}."
+        )
+
+    values = dotenv_values(path)
+    missing = [key for key in (USER_KEY, PASSWORD_KEY) if not values.get(key)]
+    if missing:
+        raw = path.read_text(encoding="utf-8")
+        hint = ""
+        if any(f"{key}:" in raw for key in missing):
+            hint = (
+                " The file uses 'Key: value', but .env needs 'KEY=value'. "
+                "Replace the colons with equals signs."
+            )
+        raise RuntimeError(
+            f"{path} is missing a value for {' and '.join(missing)}.{hint}"
+        )
+
+    return values[USER_KEY], values[PASSWORD_KEY]
+
+
+def build_connection_url(config, user, password):
+    """Assemble the Postgres URL from config plus the two secrets."""
+    database = config["database"]
+    return (
+        f"postgresql://{user}:{password}"
+        f"@{database['host']}:{database['port']}/{database['name']}"
+    )
+
+
+def extract_raw_data(config_path=None):
+    """Extract the raw trial data from the Postgres database and save it to disk.
+    """
+    config = load_config(config_path)
+    database = config["database"]
+    user, password = read_credentials()
+
+    source_table = f"{database['schema']}.{database['table']}"
+    raw_path = PROJECT_ROOT / config["data"]["raw_path"]
+    raw_path.parent.mkdir(parents=True, exist_ok=True)
+
+    logger.info("Reading %s from %s", source_table, database["host"])
+    engine = create_engine(build_connection_url(config, user, password))
+    try:
+        frame = pd.read_sql(f"SELECT * FROM {source_table}", engine)
+    finally:
+        engine.dispose()
+
+    frame.to_csv(raw_path, index=False)
+    logger.info("Saved %d raw rows to %s", len(frame), raw_path)
+    return frame
