@@ -1,3 +1,6 @@
+# USER comment
+Going back to trying out how to develop models on open source systems, at work I use Data Bricks so, I hope to revise dockerizing and deploying it on AWS again.
+
 # Beam Trial Conversion Model
 
 Predicts, from a trial's **first 3 days of behavior**, whether a 14-day Beam trial will
