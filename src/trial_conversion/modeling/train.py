@@ -12,13 +12,13 @@ from xgboost import XGBClassifier
 
 logger = logging.getLogger(__name__)
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_CONFIG_PATH = PROJECT_ROOT / "config.yaml"
+from trial_conversion.paths import CONFIG_PATH, PROJECT_ROOT
+
 
 
 def load_config(config_path=None):
     """Read the pipeline settings that drive feature choice and training."""
-    path = Path(config_path) if config_path else DEFAULT_CONFIG_PATH
+    path = Path(config_path) if config_path else CONFIG_PATH
     with open(path, "r", encoding="utf-8") as handle:
         return yaml.safe_load(handle)
 

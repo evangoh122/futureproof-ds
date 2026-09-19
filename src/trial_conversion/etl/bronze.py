@@ -8,9 +8,7 @@ from sqlalchemy import create_engine
 
 logger = logging.getLogger(__name__)
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_CONFIG_PATH = PROJECT_ROOT / "config.yaml"
-ENV_PATH = PROJECT_ROOT / ".env"
+from trial_conversion.paths import ENV_PATH, CONFIG_PATH, PROJECT_ROOT
 
 USER_KEY = "Username"
 PASSWORD_KEY = "Password"
@@ -18,7 +16,7 @@ PASSWORD_KEY = "Password"
 
 def load_config(config_path=None):
     """Read the pipeline settings that name the source table and output path."""
-    path = Path(config_path) if config_path else DEFAULT_CONFIG_PATH
+    path = Path(config_path) if config_path else CONFIG_PATH
     with open(path, "r", encoding="utf-8") as handle:
         return yaml.safe_load(handle)
 
