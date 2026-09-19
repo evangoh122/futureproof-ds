@@ -47,5 +47,5 @@ evaluation:
   flag_threshold: 0.35
 
 output:
-  model_path: "model.pkl"
+  model_path: "models/model.pkl"
   predictions_path: "data/04_model_pred/test_predictions.csv"

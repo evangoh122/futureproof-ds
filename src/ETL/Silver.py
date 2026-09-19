@@ -1,22 +1,53 @@
-# Import necessary libraries
+"""Clean the Bronze dataset and persist the Silver layer."""
+
+import logging
+from pathlib import Path
+
 import pandas as pd
-import numpy as np
-import os
-from dotenv import load_dotenv
-from sqlalchemy import create_engine
+import yaml
 
-# Create silver layer - This is where the data is cleaned and transformed for modeling
-def clean_data():
-    df = pd.read_csv("data/01_raw/trials_raw.csv")
+logger = logging.getLogger(__name__)
 
-    # Remove duplicates
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+
+def clean_data(config_path=None):
+    """Load, clean, and save the configured Bronze dataset."""
+    path = Path(config_path) if config_path else PROJECT_ROOT / "config.yaml"
+    with open(path, "r", encoding="utf-8") as handle:
+        config = yaml.safe_load(handle)
+
+    raw_data_path = PROJECT_ROOT / config["data"]["raw_path"]
+    clean_path = PROJECT_ROOT / config["data"]["clean_path"]
+    clean_path.parent.mkdir(parents=True, exist_ok=True)
+
+    logger.info("Reading raw data from %s", raw_data_path)
+    df = pd.read_csv(raw_data_path)
+    logger.info("Loaded %d rows", len(df))
+
     df = df.drop_duplicates()
+    logger.info("Removed duplicates. Now have %d rows", len(df))
 
-    # Remove rows with missing values
     df = df.dropna()
+    logger.info("Removed rows with missing values. Now have %d rows", len(df))
 
-    # Fix date time Columns
     date_columns = ["snapshot_date", "trial_started_at"]
-    df[date_columns] = df[date_columns].apply(pd.to_datetime, errors='coerce')
+    for column in date_columns:
+        df[column] = pd.to_datetime(df[column], errors="coerce", format="mixed")
+
+    invalid_dates = int(df[date_columns].isna().any(axis=1).sum())
+    if invalid_dates:
+        logger.warning("Dropping %d rows with invalid dates", invalid_dates)
+        df = df.dropna(subset=date_columns)
+    logger.info("Converted date columns to datetime")
+
+    df.to_csv(clean_path, index=False)
+    logger.info("Saved %d cleaned rows to %s", len(df), clean_path)
 
     return df
+
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+    result = clean_data()
+    logger.info("Silver stage complete: %d rows", len(result))

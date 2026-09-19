@@ -12,6 +12,7 @@ logging.basicConfig(
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parent
+logger = logging.getLogger(__name__)
 
 
 def load_module(module_name, module_path):
@@ -38,9 +39,13 @@ def require_step(module, *, function_name, module_path, expected_signature):
 
 def run_pipeline(*, bronze_step, silver_step, feature_step, train_step):
     """Run each pipeline stage and return the trained model."""
+    logger.info("Starting Bronze stage")
     bronze_step()
+    logger.info("Starting Silver stage")
     cleaned_data = silver_step()
+    logger.info("Starting feature-engineering stage")
     featured_data = feature_step(cleaned_data)
+    logger.info("Starting model-training stage")
     return train_step(featured_data)
 
 

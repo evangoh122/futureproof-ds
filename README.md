@@ -1,186 +1,200 @@
-# USER comment
-Going back to trying out how to develop models on open source systems, at work I use Data Bricks so, I hope to revise dockerizing and deploying it on AWS again.
-
 # Beam Trial Conversion Model
 
-Predicts, from a trial's **first 3 days of behavior**, whether a 14-day Beam trial will
-convert to a paid plan — early enough for the growth team to intervene on the ones that
-won't.
+This project is an exercise in building and running a machine-learning pipeline with
+open-source tools. At work I use Databricks; here I am revisiting local development,
+containerization, and an eventual AWS deployment.
 
-**Status:** prototype, now running as a pipeline. `python main.py` reproduces the whole
-thing end to end — pull, clean, feature-build, train, save. Nothing is scoring live trials
-yet; that is the deployment conversation.
+The model predicts, from a trial user's **first three days of behavior**, whether their
+14-day Beam trial will convert to a paid plan. This gives the growth team time to
+intervene before the trial ends.
 
-## The problem
+**Status:** prototype pipeline. One command extracts the data, cleans it, builds features,
+trains the models, evaluates them, and saves the selected model and predictions. It does
+not yet score live trials.
 
-Beam launched a 14-day free trial on August 1, 2026. Roughly 250 people start one each
-week, and only about half convert — the business case assumed 58%. Today the growth team
-only learns how a trial went once it is over, when there is nothing left to do about it.
+## Business problem
 
-So the question this repo answers is:
+Beam launched a 14-day free trial on August 1, 2026. Roughly 250 people begin a trial each
+week, but only about half convert; the business case assumed 58%. The growth team currently
+learns the outcome after a trial ends, when it is too late to intervene.
+
+This project asks:
 
 > For a trial that started three days ago, how likely is it to convert at the end of day 14?
 
-Day 3 is early enough to leave 11 days of runway for an intervention, and late enough that
-there is real behavior to read.
-
-Full business context, stakeholders, and value estimates:
-[trial-conversion-model-plan.md](trial-conversion-model-plan.md).
+Day 3 leaves 11 days for an intervention while providing enough behavior for useful
+prediction. See [trial-conversion-model-plan.md](trial-conversion-model-plan.md) for the
+full business context, stakeholders, and roadmap.
 
 ## Results
 
-Trained on 1,516 completed trials (53.2% converted). 25% held out for test, stratified.
+The models were trained on 1,516 completed trials, of which 53.2% converted. A stratified
+25% test split was held out.
 
 | Model | Test AUC |
-|---|---|
-| Logistic regression (baseline) | 0.827 |
+|---|---:|
+| Logistic regression baseline | 0.827 |
 | **XGBoost** | **0.876** |
 
-XGBoost accuracy at a 0.5 cutoff is 0.792, with balanced precision and recall on both
-classes. Both models train on every run, so the comparison lands in the log each time
-rather than being a number someone has to go and re-derive.
+At a 0.5 decision threshold, XGBoost achieved 0.792 accuracy with balanced precision and
+recall. Both models train on every pipeline run so the baseline comparison appears in the
+logs.
 
-What matters more than AUC is whether the low-scoring group is a usable intervention list.
-Scoring the test set and flagging everything below 0.35:
+At the configured intervention threshold of 0.35:
 
-- 148 of 379 trials flagged
+- 148 of 379 test trials were flagged
 - flagged trials converted at **17.6%**
-- everyone else converted at **76.2%**
+- all other trials converted at **76.2%**
 
-That separation is what an intervention list should look like. The cutoff itself is the
-lifecycle team's call, not a modeling decision — it depends on how many trials they can
-actually work through in a week, so it lives in `config.yaml` as
-`evaluation.flag_threshold` rather than being buried in code.
+The threshold is configurable because the growth team's weekly intervention capacity is a
+business decision rather than a fixed modeling assumption.
 
-### What the model reads
+## Features
 
-Feature importance lands where the exploration suggested: total first-3-day usage
-dominates, then how concentrated that usage was on day 1, then how much of it was
-listening. The binge pattern is the interesting one — users who cram most of their sessions
-into day 1 and then go quiet convert far below everyone else *at the same session total*.
-That interaction is why the tree model beats the linear baseline.
+The model uses first-three-day engagement measures. Derived features include:
 
-Derived features, all built in `add_features()`: `sessions_3d`, `active_days_3d`,
-`day1_share`, `listen_share`, `avg_session_minutes`. Raw `total_minutes_3d`, `country`, and
-`device_type` go in alongside them. 38 trials had zero sessions in the first 3 days; their
-share/average features divide by zero and are filled with 0, since zero engagement is real
-information rather than a missing value.
+- `sessions_3d`
+- `active_days_3d`
+- `day1_share`
+- `listen_share`
+- `avg_session_minutes`
 
-## Layout
+Raw `total_minutes_3d`, `country`, and `device_type` are included alongside them. Trials
+with no sessions have their share and average features filled with zero because zero
+engagement is meaningful information.
 
-```
-main.py                                  orchestrates the four stages in order
-config.yaml                              features, hyperparameters, thresholds, paths, table
-.env                                     database Username / Password only (gitignored)
+## Project structure
 
-src/ETL/Bronze.py                        pull from Postgres     -> data/01_raw/
-src/ETL/Silver.py                        dedupe, dropna, dates  -> in memory
-src/Feature Engineering/features.py      derived features       -> data/03_feature_engineering/
-src/Modeling/train.py                    baseline + XGBoost     -> model.pkl, data/04_model_pred/
+```text
+main.py                                  orchestrates all four pipeline stages
+config.yaml                              paths, database location, features, model settings
+pyproject.toml                           Python project and dependency declarations
+uv.lock                                  exact dependency versions resolved by uv
+.python-version                          project Python version
+.env                                     database credentials only; not committed
 
-notebooks/trial_conversion_model.ipynb   the original analysis: load, clean, EDA, model, eval
-trial-conversion-model-plan.md           business case, stakeholders, roadmap, out-of-scope
-tests/test_main.py                       pipeline wiring tests (no database needed)
-```
+src/ETL/Bronze.py                        PostgreSQL -> data/01_raw/
+src/ETL/Silver.py                        clean data -> data/02_processed/
+src/Feature Engineering/features.py      build features -> data/03_feature_engineering/
+src/Modeling/train.py                    train/evaluate -> model and predictions
 
-Data flows through numbered layers, medallion-style:
-
-```
-data/01_raw/trials_raw.csv                as pulled from ml.trial_snapshot_latest
-data/02_processed/trials_clean.csv        post-clean
-data/03_feature_engineering/features.csv  post-feature-build
-data/04_model_pred/test_predictions.csv   scored test set: actual, probability, label
-model.pkl                                 XGBoost classifier, saved with joblib
+notebooks/trial_conversion_model.ipynb   original analysis and exploration
+trial-conversion-model-plan.md           business case and project roadmap
 ```
 
-The CSVs and `model.pkl` are gitignored; they are reproducible with one command.
+The pipeline follows a numbered, medallion-style data flow:
 
-## Running it
-
-Python 3.11.
-
-```bash
-pip install -r requirements.txt
+```text
+data/01_raw/trials_raw.csv                extracted source data
+data/02_processed/trials_clean.csv        deduplicated and cleaned data
+data/03_feature_engineering/features.csv  model-ready features
+data/04_model_pred/test_predictions.csv   test labels and probabilities
+model.pkl                                 fitted selected model
 ```
 
-Create `.env` from `.env.example` and fill in the two secrets:
+Generated CSV files and `model.pkl` are ignored by Git and can be reproduced by running
+the pipeline.
 
-```
-Username=...
-Password=...
-```
+## Setup with uv
 
-The format is `KEY=value`. `python-dotenv` cannot parse `Key: value` and skips those lines
-silently, so `Bronze.py` checks for it and says so explicitly rather than building a broken
-connection string. Everything else about the connection — host, port, database, schema,
-table — is non-secret and lives in `config.yaml` under `database:`.
+The project uses Python 3.13 and [uv](https://docs.astral.sh/uv/) for dependency and virtual
+environment management. `pyproject.toml` declares the dependencies and `uv.lock` records
+the exact resolved environment. `requirements.txt` is no longer the primary dependency
+source.
 
-Then, from the repo root:
+From the repository root, create or synchronize the environment:
 
-```bash
-python main.py
+```powershell
+uv sync
 ```
 
-That runs Bronze, Silver, features, and train in order, and takes about 7 seconds. Each
-stage logs what it did and where it wrote.
+Create `.env` from `.env.example` and add the two database secrets:
 
-### Tests
-
-```bash
-python -m pytest
+```dotenv
+Username=your_username
+Password=your_password
 ```
 
-Use `python -m pytest`, not bare `pytest`. The `-m` form puts the repo root on `sys.path`,
-which is what lets `tests/test_main.py` do `import main`. Bare `pytest` fails at collection
-with `ModuleNotFoundError: No module named 'main'` unless you add an empty `conftest.py` at
-the repo root.
+The format must be `KEY=value`. Database host, port, name, schema, and table are non-secret
+settings stored in `config.yaml`.
 
-The tests use fakes throughout and never touch the database, so they run offline in well
-under a second.
+## Run the pipeline
 
-### Changing what it does
+From the repository root:
 
-Edit `config.yaml`, not the code:
+```powershell
+uv run python main.py
+```
 
-| Key | Effect |
+The stages run in this order:
+
+1. Bronze fetches `ml.trial_snapshot_latest` from PostgreSQL and saves the raw CSV.
+2. Silver removes duplicate and missing rows, converts the date columns, and saves the
+   cleaned CSV.
+3. Feature engineering creates the configured model features.
+4. Training fits the logistic-regression baseline and configured model, evaluates them,
+   and saves the model and test predictions.
+
+Every stage logs when it starts, how many rows it processed, and where it saved its output.
+The database must be reachable because Bronze fetches fresh data on every full run.
+
+To run only the Silver cleaning stage against the existing Bronze CSV:
+
+```powershell
+uv run python src/ETL/Silver.py
+```
+
+## Configuration
+
+Change pipeline behavior in `config.yaml` rather than hard-coding settings in the Python
+files.
+
+| Key | Purpose |
 |---|---|
+| `database.*` | PostgreSQL host, port, database, schema, and table |
+| `data.raw_path` | Bronze CSV output and Silver input |
+| `data.clean_path` | Silver CSV output |
+| `data.features_path` | Feature-engineered CSV output |
+| `data.features` | Numeric features used for training |
+| `data.categorical_features` | Categorical features to one-hot encode |
+| `data.test_size` | Fraction reserved for testing |
+| `data.random_state` | Reproducible train/test split seed |
 | `model.type` | `xgb` or `logistic_regression` |
-| `xgboost.*` | hyperparameters passed straight to `XGBClassifier` |
-| `data.features` / `data.categorical_features` | which columns the model sees |
-| `data.test_size` / `data.random_state` | the split |
-| `evaluation.flag_threshold` | the intervention cutoff |
-| `database.schema` / `database.table` | the source table |
+| `xgboost.*` | Arguments passed to `XGBClassifier` |
+| `logistic_regression.*` | Arguments passed to `LogisticRegression` |
+| `evaluation.decision_threshold` | Probability cutoff for class labels |
+| `evaluation.flag_threshold` | Probability cutoff for intervention candidates |
+| `output.*` | Saved model and prediction paths |
 
-### The notebook
+## Notebook
 
-```bash
-jupyter notebook notebooks/trial_conversion_model.ipynb
+Launch the exploratory notebook inside the uv environment:
+
+```powershell
+uv run jupyter notebook notebooks/trial_conversion_model.ipynb
 ```
 
-Still the best place to read the reasoning — the EDA, the binge-pattern finding, the plots.
-It prompts for the database password with `getpass` and writes its CSVs to whatever
-directory it runs from. The pipeline is the thing to run; the notebook is the thing to read.
+The notebook contains the original EDA, plots, and reasoning. The pipeline is the
+reproducible execution path; the notebook is the exploratory record.
 
-**Data source:** `ml.trial_snapshot_latest` on the Beam Postgres instance, maintained by
-data engineering. One row per completed trial, carrying base aggregates from the first 3
-days (sessions per day, listening sessions, total minutes). Arrived clean — no missing
-values, no duplicate trials, only the date columns needing a type fix. Bronze refetches on
-every run, so `main.py` needs the database reachable.
+## Tests
+
+Pytest is installed in the uv environment. When tests are present under `tests/`, run:
+
+```powershell
+uv run pytest
+```
+
+The repository currently has no committed test files, so adding unit tests for feature
+engineering and model-matrix construction remains useful follow-up work.
 
 ## Next steps
 
-1. **Pilot with growth.** The model beats the team's current heuristic of eyeballing raw
-   session counts, which was the bar for continuing past the prototype.
-2. **Deploy.** To be useful it has to score trials on day 3 while they are still live. The
-   pipeline is the first half of that; what is missing is a scheduler, a scoring entry
-   point that loads `model.pkl` instead of retraining, and somewhere for the scores to land.
-3. **Monitor and retrain.** The trial launched alongside a large marketing campaign, and
-   campaign traffic behaves differently from steady-state acquisition. When monitoring shows
-   the trial population has drifted from what the model was trained on, retrain on newer
-   cohorts.
+1. Pilot the intervention list with the growth team.
+2. Add a scoring entry point that loads `model.pkl` without retraining.
+3. Schedule day-3 scoring and store the resulting scores.
+4. Monitor population and model drift, then retrain on newer cohorts when needed.
+5. Containerize the application and prepare an AWS deployment.
 
-Known rough edges: Bronze always refetches, so there is no offline mode for iterating on the
-model; and the tests cover pipeline wiring only, not `add_features` or `build_design_matrix`.
-
-Out of scope for now: churn among existing paid subscribers, uplift modeling, and any
-change to the trial's length, price, or eligibility rules.
+Out of scope for this prototype: paid-subscriber churn, uplift modeling, and changes to
+trial length, price, or eligibility.
